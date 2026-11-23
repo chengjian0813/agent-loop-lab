@@ -1,0 +1,53 @@
+package dev.agentloop.lab.checkout;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.math.BigDecimal;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+/** Spec for experiment 03. Agents must not edit or skip this file. */
+class AllocationSpecTest {
+
+    private final DiscountAllocator allocator = new DiscountAllocator();
+
+    private static CartItem item(String price, int qty) {
+        return new CartItem("SKU-" + price, new BigDecimal(price), qty);
+    }
+
+    @Test
+    void splitsProportionally() {
+        var parts = allocator.allocate(List.of(item("60.00", 1), item("40.00", 1)), new BigDecimal("20.00"));
+        assertThat(parts).containsExactly(new BigDecimal("12.00"), new BigDecimal("8.00"));
+    }
+
+    @Test
+    void remainderGoesToLargestLine() {
+        // 10.00 / 3 = 3.33 each, the 0.01 remainder goes to the first (all equal) line
+        var parts = allocator.allocate(List.of(item("10.00", 1), item("10.00", 1), item("10.00", 1)),
+                new BigDecimal("10.00"));
+        assertThat(parts).containsExactly(new BigDecimal("3.34"), new BigDecimal("3.33"), new BigDecimal("3.33"));
+    }
+
+    @Test
+    void sumAlwaysEqualsTotal() {
+        var items = List.of(item("19.99", 3), item("0.01", 7), item("123.45", 1), item("5.55", 2));
+        var total = new BigDecimal("17.77");
+        var parts = allocator.allocate(items, total);
+        assertThat(parts.stream().reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(total);
+    }
+
+    @Test
+    void noLineGetsMoreThanItsAmount() {
+        var items = List.of(item("0.01", 1), item("99.99", 1));
+        var parts = allocator.allocate(items, new BigDecimal("100.00"));
+        assertThat(parts.get(0)).isLessThanOrEqualTo(new BigDecimal("0.01"));
+        assertThat(parts.get(1)).isLessThanOrEqualTo(new BigDecimal("99.99"));
+    }
+
+    @Test
+    void zeroDiscountGivesZeros() {
+        var parts = allocator.allocate(List.of(item("10.00", 1), item("5.00", 2)), BigDecimal.ZERO);
+        assertThat(parts).allMatch(p -> p.compareTo(BigDecimal.ZERO) == 0);
+    }
+}
